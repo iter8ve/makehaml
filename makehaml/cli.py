@@ -6,6 +6,8 @@ from tempfile import NamedTemporaryFile, mkdtemp
 import os
 import re
 import logging
+import haml
+import mako.template
 
 logger = logging.getLogger(os.path.dirname(__file__))
 logger.addHandler(logging.StreamHandler())
@@ -14,6 +16,7 @@ logger.setLevel(logging.WARN)
 from pyutils.file import open_or_stdout
 
 HTML2HAML_PATH = '/usr/local/var/rbenv/shims/html2haml'
+HAML_PATH = '/usr/local/var/rbenv/shims/haml'
 
 doublestar_to_kwargs = r'("(\w+?)"\:\s([^\,\}]*))'
 hash_to_kwargs = r'"?(([\-\w]*?)"?\s=>\s(\d+|".*?"))'
@@ -65,42 +68,51 @@ def _pythonize(ruby_haml):
 
     return ruby_haml
 
+def _run_ruby_executable(ruby_executable_path, input):
+    if not os.path.isfile(input):
+        logger.debug("Sending from stdin...")
+        subprocess_args = [ruby_executable_path]
+        p = subprocess.Popen(
+            subprocess_args,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        output, err = p.communicate(input)
+    else:
+        subprocess_args = [ruby_executable_path, input]
+        output = subprocess.check_output(subprocess_args)
+    return output
+
 def convert(input, output_file=None, from_format="html", to_format="pyhaml"):
     logger.debug("convert got input {}; from {}, to {}"
         .format(input, from_format, to_format))
 
-    if from_format == "html":
-        if not os.path.isfile(input):
-            logger.debug("Sending from stdin...")
-            subprocess_args = [HTML2HAML_PATH]
-            p = subprocess.Popen(
-                subprocess_args,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            haml, err = p.communicate(input)
-        else:
-            subprocess_args = [HTML2HAML_PATH, input]
-            haml = subprocess.check_output(subprocess_args)
+    if (from_format, to_format) == ("html", "haml"):
+        output = _run_ruby_executable(HTML2HAML_PATH, input)
+    elif (from_format, to_format) == ("html", "pyhaml"):
+        haml_output = _run_ruby_executable(HTML2HAML_PATH, input)
+        output = _pythonize(haml_output)
+    elif (from_format, to_format) == ("haml", "pyhaml"):
+        output = _pythonize(input)
+    elif (from_format, to_format) == ("haml", "html"):
+        output = _run_ruby_executable(HAML_PATH, input)
+    elif (from_format, to_format) == ("pyhaml", "html"):
+        template = mako.template.Template(input,
+            preprocessor=haml.preprocessor)
+        output = template.render()
     else:
-        if to_format == "haml":
-            return None
-        else:
-            haml = input
-
-    if to_format == "pyhaml":
-        output = _pythonize(haml)
-    else:
-        output = haml
+        return None
 
     with open_or_stdout(output_file) as f:
         f.write(output)
 
 
+choices = ('haml', 'html', 'pyhaml')
+
 @click.command()
-@click.option('from_format', '-f', '--from', type=click.Choice(['haml', 'html']), default='html')
-@click.option('to_format', '-t', '--to', type=click.Choice(['haml', 'pyhaml']), default='pyhaml')
+@click.option('from_format', '-f', '--from', type=click.Choice(choices), default='html')
+@click.option('to_format', '-t', '--to', type=click.Choice(choices), default='pyhaml')
 @click.option('--output-file', '-o', default=None, type=click.File('w'))
 @click.argument('input', required=False, default=None)
 def cli(from_format, to_format, output_file, input):

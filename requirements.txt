@@ -1,7 +1,9 @@
 chardet==2.3.0
 click==3.3
-lmn-pyutils==0.3.1
+-e /Users/msb/dev/pyutils
 pyRFC3339==0.2
 python-dateutil==2.4.0
 pytz==2014.10
 six==1.9.0
+PyHAML==1.1.0
+
