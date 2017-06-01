@@ -8,6 +8,7 @@ import re
 import logging
 import haml
 import mako.template
+import codecs
 
 logger = logging.getLogger(os.path.dirname(__file__))
 logger.addHandler(logging.StreamHandler())
@@ -31,6 +32,7 @@ def _pythonize(ruby_haml):
     repl_patt_2 = r'\2=\3'
 
     # logger.debug("before:\n{0}\n".format(ruby_haml))
+    ruby_haml = ruby_haml.decode('utf-8')
 
     # Look for rockets inside brackets (html2haml generates old-school hashes)
     matches = re.finditer(brackets_patt, ruby_haml, re.MULTILINE)
@@ -105,6 +107,10 @@ def convert(input, output_file=None, from_format="html", to_format="pyhaml"):
         return None
 
     with open_or_stdout(output_file) as f:
+        try:
+            output = codecs.decode(output, 'utf-8')
+        except TypeError:
+            pass # unicode by default in Python 3
         f.write(output)
 
 
